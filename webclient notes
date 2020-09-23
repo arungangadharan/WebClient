@@ -1,0 +1,71 @@
+web client
+======
+
+A Publisher (for example Publisher<Foo>) can return zero or multiple, possibly infinite, results. To make it more clear how many results you can expect, Project Reactor (the reactive streams implementation of Pivotal) introduced two implementations of Publisher:
+
+	- A Mono<T>, which can either return zero or one result before completing,
+	- Flux<T>, which can return zero to many, possibly infinite, results before completing.
+
+The Mono
+--------
+The first type of publisher is a Mono. The Mono API allows you to emit only a single value, after which it will immediately complete. This means that the Mono is the reactive counter-part of returning a simple object, or an Optional.
+public Person findCurrentUser() {
+    if (isAuthenticated()) return new Person("Jane", "Doe");
+    else return null;
+}
+
+The Flux
+---------
+While the Mono is used for handling zero or one result, the Flux is used to handle zero to many results, possibly even infinite results. We can see this as the reactive-counter part of a collection, an array or a stream.
+
+For example, if we have the following code:
+
+public List<Person> findAll() {
+    return Arrays.asList(
+        new Person("Jane", "Doe"),
+        new Person("John", "Doe")
+    );
+}
+
+Let’s assume the following code, what will be printed on the console:
+
+Flux
+    .just(1, 2, 3, 4)
+    .reduce(Integer::sum)
+    .log();
+The answer to that question would be, nothing, nothing at all. Reactive streams use a push model. This means that items are pushed on the stream at the pace of the publisher, regardless of whether the subscriber can follow or not (no worries, backpressure is a key-feature of reactive streams).
+
+By that logic, one would think that the reactive stream in the previous example would emit the 10. However, reactive streams are lazy, and won’t start as long as there is no subscriber present. That means that a subscriber is always necessary with reactive streams.
+
+Asynchronous nature
+I’ve mentioned before that publishers are asynchronous in nature, but are they always asynchronous? The answer to that is, no, not always. Whether or not a reactive stream is synchronous or asynchronous, depends on the type of publisher you use.
+
+For example, let’s assume the following code:
+
+AtomicInteger sum = new AtomicInteger(0);
+Flux
+    .just(1, 2, 3, 4)
+    .reduce(Integer::sum)
+    .subscribe(sum::set);
+log.info("Sum is: {}", sum.get());
+What do you think will happen? Will it print 10 on the console, because that’s the sum of those numbers, or will it print 0 on the console, because the stream is handled asynchronously, and thus the result hasn’t been calculated yet when it reaches the logging statement?
+
+The answer to that question is that it will print 10 onto the console, because Flux.just() by default uses the current thread, and thus the result has been calculated when it reaches the logging statement.
+
+Now, what would be the result in the following example?
+
+AtomicInteger sum = new AtomicInteger(0);
+Flux
+    .just(1, 2, 3, 4)
+    .subscribeOn(Schedulers.elastic())
+    .reduce(Integer::sum)
+    .subscribe(sum::set);
+logger.info("Sum is: {}", sum.get());
+The answer in this case would be 0, because using subscribeOn() will execute the subscription on a different scheduler worker thread, making it asynchronous.
+
+So, depending on the nature of the reactive stream, it will be either synchronous or asynchronous. Code like I just wrote is a bad practice when you work with reactive streams. The proper solution would have been:
+
+Flux
+    .just(1, 2, 3, 4)
+    .reduce(Integer::sum)
+    .susbcribe(sum -> logger.info("Sum is: {}", sum);
